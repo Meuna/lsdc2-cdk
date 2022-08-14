@@ -20,7 +20,7 @@ export class Lsdc2CdkStack extends Stack {
     const discordBotFrontendPath = String(this.node.tryGetContext('discordBotFrontendPath'));
 
     // Base resources
-    const { bucket, specTable, instanceTable } = this.setupStateResources()
+    const { bucket, specTable, guildTable, instanceTable } = this.setupStateResources()
     const { vpc, cluster, clusterLogGroup, executionRole, taskRole } = this.setupClusterResources(bucket)
 
     // Setup discord bot lambdas
@@ -41,6 +41,7 @@ export class Lsdc2CdkStack extends Stack {
       'LOG_GROUP': clusterLogGroup.logGroupName,
       'SAVEGAME_BUCKET': bucket.bucketName,
       'SPEC_TABLE': specTable.tableName,
+      'GUILD_TABLE': guildTable.tableName,
       'INSTANCE_TABLE': instanceTable.tableName,
       'EXECUTION_ROLE_ARN': executionRole.roleArn,
       'TASK_ROLE_ARN': taskRole.roleArn,
@@ -67,7 +68,7 @@ export class Lsdc2CdkStack extends Stack {
       statements: [
         new iam.PolicyStatement({
           resources: [botQueue.queueArn],
-          actions: ['sqs:DeleteMessage', 'sqs:ReceiveMessage', 'sqs:SendMessage', 'sqs:GetQueueAttributes'],
+          actions: ['sqs:ChangeMessageVisibility', 'sqs:GetQueueUrl', 'sqs:DeleteMessage', 'sqs:ReceiveMessage', 'sqs:SendMessage', 'sqs:GetQueueAttributes'],
         }),
       ],
     });
@@ -78,7 +79,7 @@ export class Lsdc2CdkStack extends Stack {
           actions: ['s3:PutObject', 's3:GetObject']
         }),
         new iam.PolicyStatement({
-          resources: [specTable.tableArn, instanceTable.tableArn],
+          resources: [specTable.tableArn, guildTable.tableArn, instanceTable.tableArn],
           actions: ['dynamodb:GetItem', 'dynamodb:Scan', 'dynamodb:PutItem', 'dynamodb:DeleteItem']
         }),
       ],
@@ -87,7 +88,7 @@ export class Lsdc2CdkStack extends Stack {
       statements: [
         new iam.PolicyStatement({
           resources: ['*'],
-          actions: ['ecs:RegisterTaskDefinition', 'ecs:DeregisterTaskDefinition']
+          actions: ['ecs:RegisterTaskDefinition', 'ecs:DeregisterTaskDefinition', 'ecs:ListTaskDefinitions']
         }),
         new iam.PolicyStatement({
           resources: [
@@ -102,7 +103,15 @@ export class Lsdc2CdkStack extends Stack {
       statements: [
         new iam.PolicyStatement({
           resources: ['*'],
-          actions: ['ec2:DescribeNetworkInterfaces'],
+          actions: ['ec2:DescribeNetworkInterfaces', 'ec2:DescribeSecurityGroups'],
+        }),
+        new iam.PolicyStatement({
+          resources: [
+            vpc.vpcArn,
+            this.formatArn({ service: 'ec2', resource: 'security-group', resourceName: '*' }),
+            this.formatArn({ service: 'ec2', resource: 'security-group-rule', resourceName: '*' }),
+          ],
+          actions: ['ec2:CreateSecurityGroup', 'ec2:DeleteSecurityGroup', 'ec2:AuthorizeSecurityGroupIngress'],
         }),
       ],
     });
@@ -139,7 +148,8 @@ export class Lsdc2CdkStack extends Stack {
       handler: 'frontend',
       code: lambda.Code.fromAsset(discordBotFrontendPath),
       role: role,
-      environment: discordBotEnv
+      environment: discordBotEnv,
+      timeout: Duration.minutes(1)
     });
     const botUrl = frontFn.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.NONE,
@@ -166,6 +176,12 @@ export class Lsdc2CdkStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
       partitionKey: { name: 'key', type: dynamodb.AttributeType.STRING },
     });
+    const guildTable = new dynamodb.Table(this, 'guild', {
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      tableClass: dynamodb.TableClass.STANDARD_INFREQUENT_ACCESS,
+      removalPolicy: RemovalPolicy.DESTROY,
+      partitionKey: { name: 'key', type: dynamodb.AttributeType.STRING },
+    });
     const instanceTable = new dynamodb.Table(this, 'instance', {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       tableClass: dynamodb.TableClass.STANDARD_INFREQUENT_ACCESS,
@@ -173,7 +189,7 @@ export class Lsdc2CdkStack extends Stack {
       partitionKey: { name: 'key', type: dynamodb.AttributeType.STRING },
     });
 
-    return { bucket, specTable, instanceTable }
+    return { bucket, specTable, guildTable, instanceTable }
   }
 
   setupClusterResources(bucket: s3.Bucket) {
