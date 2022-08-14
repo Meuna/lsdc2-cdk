@@ -9,6 +9,8 @@ import { aws_ecs as ecs } from 'aws-cdk-lib';
 import { aws_sqs as sqs } from 'aws-cdk-lib';
 import { aws_lambda as lambda } from 'aws-cdk-lib';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import { aws_events as events } from 'aws-cdk-lib';
+import { aws_events_targets as targets } from 'aws-cdk-lib';
 
 
 export class Lsdc2CdkStack extends Stack {
@@ -140,6 +142,16 @@ export class Lsdc2CdkStack extends Stack {
     backFn.addEventSource(new SqsEventSource(botQueue, {
       batchSize: 1,
     }));
+    new events.Rule(this, `ecsToBackendRule`, {
+      eventPattern: {
+        source: ["aws.ecs"],
+        detailType: ["ECS Task State Change"],
+        detail: {
+          clusterArn: [cluster.clusterArn]
+        }
+      },
+      targets: [new targets.LambdaFunction(backFn)]
+    })
 
     // Frontend lambda (with a function url)
     const frontFn = new lambda.Function(this, 'discordBotFrontendLambda', {
@@ -156,7 +168,7 @@ export class Lsdc2CdkStack extends Stack {
     });
 
     // Output
-    new CfnOutput(this, 'bucketName', {
+    new CfnOutput(this, 'discordBotUrl', {
       value: botUrl.url,
       description: 'The Discord interactions endpoint URL',
     });
