@@ -152,7 +152,8 @@ export class Lsdc2CdkStack extends Stack {
       handler: 'backend',
       code: lambda.Code.fromAsset(discordBotBackendPath),
       role: role,
-      environment: discordBotEnv
+      environment: discordBotEnv,
+      timeout: Duration.minutes(1)
     });
     backFn.addEventSource(new SqsEventSource(botQueue, {
       batchSize: 1,
@@ -176,7 +177,6 @@ export class Lsdc2CdkStack extends Stack {
       code: lambda.Code.fromAsset(discordBotFrontendPath),
       role: role,
       environment: discordBotEnv,
-      timeout: Duration.minutes(1)
     });
     const botUrl = frontFn.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.NONE,
