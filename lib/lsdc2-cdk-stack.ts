@@ -1,5 +1,5 @@
 import { Construct } from 'constructs';
-import { Stack, StackProps, RemovalPolicy, CfnOutput, Duration } from 'aws-cdk-lib';
+import { Stack, StackProps, RemovalPolicy, CfnOutput, CfnParameter, Duration } from 'aws-cdk-lib';
 import { aws_iam as iam } from 'aws-cdk-lib';
 import { aws_logs as logs } from 'aws-cdk-lib';
 import { aws_s3 as s3 } from 'aws-cdk-lib';
@@ -16,6 +16,13 @@ import { aws_events_targets as targets } from 'aws-cdk-lib';
 export class Lsdc2CdkStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
+
+    // Arguments
+    const discordParam = new CfnParameter(this, "discordParam", {
+      type: "String",
+      default: "/lsdc2/discord-secrets",
+      description: "The name of the SSM parameter that hold Discord secrets."
+    });
 
     // Context
     const discordBotBackendPath = String(this.node.tryGetContext('discordBotBackendPath'));
@@ -34,8 +41,7 @@ export class Lsdc2CdkStack extends Stack {
 
     // Bots env
     const discordBotEnv = {
-      'DISCORD_PKEY': 'To be filled with Discord bot public key',
-      'DISCORD_TOKEN': 'To be filled with Discord bot token',
+      'DISCORD_PARAM': discordParam.valueAsString,
       'BOT_QUEUE_URL': botQueue.queueUrl,
       'VPC': vpc.vpcId,
       'SUBNETS': vpc.publicSubnets.map((sn) => sn.subnetId).join(';'),
@@ -50,14 +56,6 @@ export class Lsdc2CdkStack extends Stack {
     }
 
     // Lambda role
-    const botLogPolicy = new iam.PolicyDocument({
-      statements: [
-        new iam.PolicyStatement({
-          resources: [this.formatArn({ service: 'logs', resource: '*' })],
-          actions: ['logs:CreateLogGroup', 'logs:CreateLogStream', 'logs:PutLogEvents'],
-        }),
-      ],
-    });
     const botIamPolicy = new iam.PolicyDocument({
       statements: [
         new iam.PolicyStatement({
@@ -66,11 +64,11 @@ export class Lsdc2CdkStack extends Stack {
         }),
       ],
     });
-    const botSqsPolicy = new iam.PolicyDocument({
+    const botLogPolicy = new iam.PolicyDocument({
       statements: [
         new iam.PolicyStatement({
-          resources: [botQueue.queueArn],
-          actions: ['sqs:ChangeMessageVisibility', 'sqs:GetQueueUrl', 'sqs:DeleteMessage', 'sqs:ReceiveMessage', 'sqs:SendMessage', 'sqs:GetQueueAttributes'],
+          resources: [this.formatArn({ service: 'logs', resource: '*' })],
+          actions: ['logs:CreateLogGroup', 'logs:CreateLogStream', 'logs:PutLogEvents'],
         }),
       ],
     });
@@ -117,6 +115,22 @@ export class Lsdc2CdkStack extends Stack {
         }),
       ],
     });
+    const botSqsPolicy = new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          resources: [botQueue.queueArn],
+          actions: ['sqs:ChangeMessageVisibility', 'sqs:GetQueueUrl', 'sqs:DeleteMessage', 'sqs:ReceiveMessage', 'sqs:SendMessage', 'sqs:GetQueueAttributes'],
+        }),
+      ],
+    });
+    const botSsmPolicy = new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          resources: [this.formatArn({ service: 'ssm', resource: 'parameter' + discordParam.valueAsString })],
+          actions: ['ssm:GetParameter'],
+        }),
+      ],
+    });
     const role = new iam.Role(this, 'discordBotRole', {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
       description: 'Role for the LSDC2 discord bot',
@@ -127,6 +141,7 @@ export class Lsdc2CdkStack extends Stack {
         'ecs': botEcsPolicy,
         'ec2': botEc2Policy,
         'sqs': botSqsPolicy,
+        'ssm': botSsmPolicy,
       },
     });
 
