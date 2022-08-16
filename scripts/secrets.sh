@@ -53,4 +53,4 @@ aws ssm put-parameter \
     --value $json_value \
     --type SecureString \
     --tier Standard \
-    --tags Key=LSDC2-src,Value=script > /dev/null
+    --tags Key=lsdc2-src,Value=script > /dev/null
