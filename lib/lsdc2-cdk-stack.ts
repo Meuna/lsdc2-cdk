@@ -111,7 +111,7 @@ export class Lsdc2CdkStack extends Stack {
             this.formatArn({ service: 'ec2', resource: 'security-group', resourceName: '*' }),
             this.formatArn({ service: 'ec2', resource: 'security-group-rule', resourceName: '*' }),
           ],
-          actions: ['ec2:CreateSecurityGroup', 'ec2:DeleteSecurityGroup', 'ec2:AuthorizeSecurityGroupIngress'],
+          actions: ['ec2:CreateSecurityGroup', 'ec2:DeleteSecurityGroup', 'ec2:AuthorizeSecurityGroupIngress', 'ec2:CreateTags'],
         }),
       ],
     });
