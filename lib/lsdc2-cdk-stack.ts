@@ -153,7 +153,7 @@ export class Lsdc2CdkStack extends Stack {
       code: lambda.Code.fromAsset(discordBotBackendPath),
       role: role,
       environment: discordBotEnv,
-      timeout: Duration.minutes(1)
+      timeout: Duration.minutes(2)
     });
     backFn.addEventSource(new SqsEventSource(botQueue, {
       batchSize: 1,
