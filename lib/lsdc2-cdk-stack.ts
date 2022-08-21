@@ -182,15 +182,6 @@ export class Lsdc2CdkStack extends Stack {
       authType: lambda.FunctionUrlAuthType.NONE,
     });
 
-    // Allow CORS from lambda (savegame upload)
-    bucket.addCorsRule({
-      allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.PUT],
-      allowedOrigins: [botUrl.url],
-
-      // the properties below are optional
-      allowedHeaders: ['*'],
-    })
-
     // Output
     new CfnOutput(this, 'discordBotUrl', {
       value: botUrl.url,
@@ -202,7 +193,13 @@ export class Lsdc2CdkStack extends Stack {
     // Bucket for server gamesave
     const bucket = new s3.Bucket(this, 'savegames', {
       versioned: true,
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL
+      cors: [
+        {
+          allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.PUT],
+          allowedOrigins: ["https://*.lambda-url." + this.region + ".on.aws"],
+          allowedHeaders: ['*'],
+        }
+      ],
     });
 
     // State tables
