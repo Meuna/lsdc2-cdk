@@ -95,7 +95,7 @@ export class Lsdc2CdkStack extends Stack {
             this.formatArn({ service: 'ecs', resource: 'task-definition', resourceName: 'lsdc2*' }),
             this.formatArn({ service: 'ecs', resource: 'task', resourceName: cluster.clusterName + '*' }),
           ],
-          actions: ['ecs:RunTask', 'ecs:StopTask', 'ecs:DescribeTasks']
+          actions: ['ecs:RunTask', 'ecs:StopTask', 'ecs:DescribeTasks', 'ecs:TagResource']
         }),
       ],
     });
@@ -148,7 +148,7 @@ export class Lsdc2CdkStack extends Stack {
     // Backend lambda
     const backFn = new lambda.Function(this, 'discordBotBackendLambda', {
       description: 'LSDC2 serverless discord bot backend',
-      runtime: lambda.Runtime.GO_1_X,
+      runtime: lambda.Runtime.PROVIDED_AL2023,
       handler: 'backend',
       code: lambda.Code.fromAsset(discordBotBackendPath),
       role: role,
@@ -169,10 +169,10 @@ export class Lsdc2CdkStack extends Stack {
       targets: [new targets.LambdaFunction(backFn)]
     })
 
-    // Frontend lambda (with a function url)
+    // Frontend lambda
     const frontFn = new lambda.Function(this, 'discordBotFrontendLambda', {
       description: 'LSDC2 serverless discord bot frontend',
-      runtime: lambda.Runtime.GO_1_X,
+      runtime: lambda.Runtime.PROVIDED_AL2023,
       handler: 'frontend',
       code: lambda.Code.fromAsset(discordBotFrontendPath),
       role: role,
@@ -183,7 +183,7 @@ export class Lsdc2CdkStack extends Stack {
     });
 
     // Output
-    new CfnOutput(this, 'discordBotUrl', {
+    new CfnOutput(this, 'botUrl', {
       value: botUrl.url,
       description: 'The Discord interactions endpoint URL',
     });
@@ -228,7 +228,7 @@ export class Lsdc2CdkStack extends Stack {
   setupClusterResources(bucket: s3.Bucket) {
     // Dedicated VPC
     const vpc = new ec2.Vpc(this, 'vpc', {
-      cidr: "10.0.0.0/24",
+      ipAddresses: ec2.IpAddresses.cidr('10.0.0.0/24'),
       natGateways: 0,
       maxAzs: 4,
       subnetConfiguration: [
@@ -274,7 +274,7 @@ export class Lsdc2CdkStack extends Stack {
       statements: [
         new iam.PolicyStatement({
           resources: [bucket.bucketArn + '/*'],
-          actions: ['s3:PutObject', 's3:GetObject']
+          actions: ['s3:PutObject', 's3:GetObject', 's3:ListBucket']
         }),
       ],
     });
