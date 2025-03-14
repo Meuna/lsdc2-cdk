@@ -195,9 +195,10 @@ export class Lsdc2CdkStack extends Stack {
       versioned: true,
       cors: [
         {
-          allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.PUT],
+          allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.PUT, s3.HttpMethods.POST],
           allowedOrigins: ["https://*.lambda-url." + this.region + ".on.aws"],
           allowedHeaders: ['*'],
+          exposedHeaders: ['ETag'],
         }
       ],
     });
