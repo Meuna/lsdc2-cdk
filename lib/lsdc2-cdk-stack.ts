@@ -273,8 +273,12 @@ export class Lsdc2CdkStack extends Stack {
     const s3Policy = new iam.PolicyDocument({
       statements: [
         new iam.PolicyStatement({
+          resources: [bucket.bucketArn],
+          actions: ['s3:ListBucket']
+        }),
+        new iam.PolicyStatement({
           resources: [bucket.bucketArn + '/*'],
-          actions: ['s3:PutObject', 's3:GetObject', 's3:ListBucket']
+          actions: ['s3:PutObject', 's3:GetObject']
         }),
       ],
     });
