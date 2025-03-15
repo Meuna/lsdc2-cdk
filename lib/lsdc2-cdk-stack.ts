@@ -231,14 +231,19 @@ export class Lsdc2CdkStack extends Stack {
     const vpc = new ec2.Vpc(this, 'vpc', {
       ipAddresses: ec2.IpAddresses.cidr('10.0.0.0/24'),
       natGateways: 0,
-      maxAzs: 4,
+      maxAzs: 4,  // FIXME: change to 2 AZs
       subnetConfiguration: [
         {
-          cidrMask: 26,
+          cidrMask: 26,  // FIXME: change to 2 AZs (cidrMask=25)
           name: 'subnet',
           subnetType: ec2.SubnetType.PUBLIC,
         },
-      ]
+      ],
+      gatewayEndpoints: {
+        S3: {
+          service: ec2.GatewayVpcEndpointAwsService.S3,
+        }
+      },
     });
 
     // Cluster
