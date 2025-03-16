@@ -11,7 +11,6 @@ import { aws_lambda as lambda } from 'aws-cdk-lib';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import { aws_events as events } from 'aws-cdk-lib';
 import { aws_events_targets as targets } from 'aws-cdk-lib';
-import { SqsQueue } from 'aws-cdk-lib/aws-events-targets';
 
 
 export class Lsdc2CdkStack extends Stack {
@@ -115,7 +114,7 @@ export class Lsdc2CdkStack extends Stack {
       statements: [
         new iam.PolicyStatement({
           resources: [botQueue.queueArn],
-          actions: ['sqs:ChangeMessageVisibility', 'sqs:GetQueueUrl', 'sqs:DeleteMessage', 'sqs:ReceiveMessage', 'sqs:SendMessage', 'sqs:GetQueueAttributes'],
+          actions: ['sqs:ReceiveMessage', 'sqs:SendMessage'],
         }),
       ],
     });
