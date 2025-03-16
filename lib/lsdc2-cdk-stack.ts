@@ -11,6 +11,7 @@ import { aws_lambda as lambda } from 'aws-cdk-lib';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import { aws_events as events } from 'aws-cdk-lib';
 import { aws_events_targets as targets } from 'aws-cdk-lib';
+import { SqsQueue } from 'aws-cdk-lib/aws-events-targets';
 
 
 export class Lsdc2CdkStack extends Stack {
@@ -29,15 +30,10 @@ export class Lsdc2CdkStack extends Stack {
     const discordBotFrontendPath = String(this.node.tryGetContext('discordBotFrontendPath'));
 
     // Base resources
-    const { bucket, specTable, guildTable, instanceTable } = this.setupStateResources()
-    const { vpc, cluster, clusterLogGroup, executionRole, taskRole } = this.setupClusterResources(bucket)
+    const { bucket, specTable, guildTable, instanceTable, botQueue } = this.setupDataResources()
+    const { vpc, cluster, clusterLogGroup, executionRole, taskRole } = this.setupClusterResources(bucket, botQueue)
 
     // Setup discord bot lambdas
-    // Frontend/backend queue
-    const botQueue = new sqs.Queue(this, 'discordBotQueue', {
-      retentionPeriod: Duration.minutes(1),
-      visibilityTimeout: Duration.minutes(2),
-    });
 
     // Bots env
     const discordBotEnv = {
@@ -189,7 +185,7 @@ export class Lsdc2CdkStack extends Stack {
     });
   }
 
-  setupStateResources() {
+  setupDataResources() {
     // Bucket for server gamesave
     const bucket = new s3.Bucket(this, 'savegames', {
       versioned: true,
@@ -223,10 +219,16 @@ export class Lsdc2CdkStack extends Stack {
       partitionKey: { name: 'key', type: dynamodb.AttributeType.STRING },
     });
 
-    return { bucket, specTable, guildTable, instanceTable }
+    // Frontend/backend queue
+    const botQueue = new sqs.Queue(this, 'discordBotQueue', {
+      retentionPeriod: Duration.minutes(1),
+      visibilityTimeout: Duration.minutes(2),
+    });
+
+    return { bucket, specTable, guildTable, instanceTable, botQueue }
   }
 
-  setupClusterResources(bucket: s3.Bucket) {
+  setupClusterResources(bucket: s3.Bucket, botQueue: sqs.Queue) {
     // Dedicated VPC
     const vpc = new ec2.Vpc(this, 'vpc', {
       ipAddresses: ec2.IpAddresses.cidr('10.0.0.0/24'),
@@ -278,6 +280,10 @@ export class Lsdc2CdkStack extends Stack {
     // Task container role
     const s3Policy = new iam.PolicyDocument({
       statements: [
+        new iam.PolicyStatement({
+          resources: [botQueue.queueArn],
+          actions: ['sqs:SendMessage'],
+        }),
         new iam.PolicyStatement({
           resources: [bucket.bucketArn],
           actions: ['s3:ListBucket']
