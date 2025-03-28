@@ -29,8 +29,8 @@ export class Lsdc2CdkStack extends Stack {
     const discordBotFrontendPath = String(this.node.tryGetContext('discordBotFrontendPath'));
 
     // Base resources
-    const { bucket, specTable, guildTable, instanceTable, botQueue } = this.setupDataResources()
-    const { vpc, cluster, clusterLogGroup, executionRole, taskRole } = this.setupClusterResources(bucket, botQueue)
+    const { bucket, specTable, guildTable, serverTable, instanceTable, botQueue } = this.setupDataResources()
+    const { vpc, cluster, clusterLogGroup, executionRole, taskContainerRole, ec2Role, ec2Profile } = this.setupEngineResources(bucket, botQueue)
 
     // Setup discord bot lambdas
 
@@ -40,21 +40,23 @@ export class Lsdc2CdkStack extends Stack {
       'BOT_QUEUE_URL': botQueue.queueUrl,
       'VPC': vpc.vpcId,
       'SUBNETS': vpc.publicSubnets.map((sn) => sn.subnetId).join(';'),
-      'CLUSTER': cluster.clusterName,
       'LOG_GROUP': clusterLogGroup.logGroupName,
       'SAVEGAME_BUCKET': bucket.bucketName,
       'SPEC_TABLE': specTable.tableName,
       'GUILD_TABLE': guildTable.tableName,
+      'SERVER_TABLE': serverTable.tableName,
       'INSTANCE_TABLE': instanceTable.tableName,
-      'EXECUTION_ROLE_ARN': executionRole.roleArn,
-      'TASK_ROLE_ARN': taskRole.roleArn,
+      'ECS_CLUSTER_NAME': cluster.clusterName,
+      'ECS_EXECUTION_ROLE_ARN': executionRole.roleArn,
+      'ECS_TASK_ROLE_ARN': taskContainerRole.roleArn,
+      'EC2_VM_PROFILE_ARN': ec2Profile.attrArn,
     }
 
     // Lambda role
     const botIamPolicy = new iam.PolicyDocument({
       statements: [
         new iam.PolicyStatement({
-          resources: [taskRole.roleArn, executionRole.roleArn],
+          resources: [taskContainerRole.roleArn, executionRole.roleArn, ec2Role.roleArn],
           actions: ['iam:PassRole'],
         }),
       ],
@@ -74,7 +76,7 @@ export class Lsdc2CdkStack extends Stack {
           actions: ['s3:PutObject', 's3:GetObject']
         }),
         new iam.PolicyStatement({
-          resources: [specTable.tableArn, guildTable.tableArn, instanceTable.tableArn],
+          resources: [specTable.tableArn, guildTable.tableArn, serverTable.tableArn, instanceTable.tableArn],
           actions: ['dynamodb:GetItem', 'dynamodb:Scan', 'dynamodb:PutItem', 'dynamodb:DeleteItem']
         }),
       ],
@@ -108,6 +110,20 @@ export class Lsdc2CdkStack extends Stack {
           ],
           actions: ['ec2:CreateSecurityGroup', 'ec2:DeleteSecurityGroup', 'ec2:AuthorizeSecurityGroupIngress', 'ec2:CreateTags'],
         }),
+        new iam.PolicyStatement({
+          resources: [
+            this.formatArn({ service: 'ec2', resource: 'instance', resourceName: '*' }),
+            this.formatArn({ service: 'ec2', resource: 'network-interface', resourceName: '*' }),
+            this.formatArn({ service: 'ec2', resource: 'security-group', resourceName: '*' }),
+            this.formatArn({ service: 'ec2', resource: 'volume', resourceName: '*' }),
+            this.formatArn({ service: 'ec2', account: '', resource: 'image', resourceName: '*' }),
+          ].concat(vpc.publicSubnets.map((sn) => this.formatArn({ service: 'ec2', resource: 'subnet', resourceName: sn.subnetId }))),
+          actions: ['ec2:RunInstances', 'ec2:CreateTags'],
+        }),
+        new iam.PolicyStatement({
+          resources: ["*"],
+          actions: ['ec2:DescribeInstances', 'ec2:DescribeImages'],
+        }),
       ],
     });
     const botSqsPolicy = new iam.PolicyDocument({
@@ -123,6 +139,10 @@ export class Lsdc2CdkStack extends Stack {
         new iam.PolicyStatement({
           resources: [this.formatArn({ service: 'ssm', resource: 'parameter' + discordParam.valueAsString })],
           actions: ['ssm:GetParameter'],
+        }),
+        new iam.PolicyStatement({
+          resources: ['*'],
+          actions: ['ssm:SendCommand', 'ssm:ListCommandInvocations', 'ssm:GetCommandInvocation'],
         }),
       ],
     });
@@ -160,6 +180,13 @@ export class Lsdc2CdkStack extends Stack {
         detail: {
           clusterArn: [cluster.clusterArn]
         }
+      },
+      targets: [new targets.LambdaFunction(backFn)]
+    })
+    new events.Rule(this, `ec2ToBackendRule`, {
+      eventPattern: {
+        source: ["aws.ec2"],
+        detailType: ["EC2 Instance State-change Notification"],
       },
       targets: [new targets.LambdaFunction(backFn)]
     })
@@ -211,6 +238,12 @@ export class Lsdc2CdkStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
       partitionKey: { name: 'key', type: dynamodb.AttributeType.STRING },
     });
+    const serverTable = new dynamodb.Table(this, 'server', {
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      tableClass: dynamodb.TableClass.STANDARD_INFREQUENT_ACCESS,
+      removalPolicy: RemovalPolicy.DESTROY,
+      partitionKey: { name: 'key', type: dynamodb.AttributeType.STRING },
+    });
     const instanceTable = new dynamodb.Table(this, 'instance', {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       tableClass: dynamodb.TableClass.STANDARD_INFREQUENT_ACCESS,
@@ -224,10 +257,10 @@ export class Lsdc2CdkStack extends Stack {
       visibilityTimeout: Duration.minutes(2),
     });
 
-    return { bucket, specTable, guildTable, instanceTable, botQueue }
+    return { bucket, specTable, guildTable, serverTable, instanceTable, botQueue }
   }
 
-  setupClusterResources(bucket: s3.Bucket, botQueue: sqs.Queue) {
+  setupEngineResources(bucket: s3.Bucket, botQueue: sqs.Queue) {
     // Dedicated VPC
     const vpc = new ec2.Vpc(this, 'vpc', {
       ipAddresses: ec2.IpAddresses.cidr('10.0.0.0/24'),
@@ -276,13 +309,9 @@ export class Lsdc2CdkStack extends Stack {
       },
     });
 
-    // Task container role
-    const s3Policy = new iam.PolicyDocument({
+    // ECS container and EC2 role
+    const instanceS3Policy = new iam.PolicyDocument({
       statements: [
-        new iam.PolicyStatement({
-          resources: [botQueue.queueArn],
-          actions: ['sqs:SendMessage'],
-        }),
         new iam.PolicyStatement({
           resources: [bucket.bucketArn],
           actions: ['s3:ListBucket']
@@ -293,14 +322,39 @@ export class Lsdc2CdkStack extends Stack {
         }),
       ],
     });
-    const taskRole = new iam.Role(this, 'taskRole', {
+    const instanceSqsPolicy = new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          resources: [botQueue.queueArn],
+          actions: ['sqs:SendMessage'],
+        }),
+      ],
+    });
+    const taskContainerRole = new iam.Role(this, 'taskContainerRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
       description: 'Role for LSDC2 task container',
       inlinePolicies: {
-        's3': s3Policy
+        's3': instanceS3Policy,
+        'sqs': instanceSqsPolicy,
       },
     });
+    const ec2Role = new iam.Role(this, 'ec2Role', {
+      assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
+      description: 'Role for LSDC2 ec2 instances',
+      inlinePolicies: {
+        's3': instanceS3Policy,
+        'sqs': instanceSqsPolicy,
+      },
+    });
+    ec2Role.addManagedPolicy(
+      iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore')
+    );
 
-    return { vpc, cluster, clusterLogGroup, executionRole, taskRole }
+    // EC2 instance profile
+    const ec2Profile = new iam.CfnInstanceProfile(this, 'ec2Profile', {
+      roles: [ec2Role.roleName],
+    });
+
+    return { vpc, cluster, clusterLogGroup, executionRole, taskContainerRole, ec2Role, ec2Profile }
   }
 }
