@@ -100,7 +100,7 @@ export class Lsdc2CdkStack extends Stack {
       statements: [
         new iam.PolicyStatement({
           resources: ['*'],
-          actions: ['ec2:DescribeNetworkInterfaces', 'ec2:DescribeSecurityGroups'],
+          actions: ['ec2:DescribeNetworkInterfaces', 'ec2:DescribeSecurityGroups', 'ec2:DescribeInstances', 'ec2:DescribeImages'],
         }),
         new iam.PolicyStatement({
           resources: [
@@ -118,11 +118,7 @@ export class Lsdc2CdkStack extends Stack {
             this.formatArn({ service: 'ec2', resource: 'volume', resourceName: '*' }),
             this.formatArn({ service: 'ec2', account: '', resource: 'image', resourceName: '*' }),
           ].concat(vpc.publicSubnets.map((sn) => this.formatArn({ service: 'ec2', resource: 'subnet', resourceName: sn.subnetId }))),
-          actions: ['ec2:RunInstances', 'ec2:CreateTags'],
-        }),
-        new iam.PolicyStatement({
-          resources: ["*"],
-          actions: ['ec2:DescribeInstances', 'ec2:DescribeImages'],
+          actions: ['ec2:RunInstances', 'ec2:CreateTags', 'ec2:ModifyVolume'],
         }),
       ],
     });
