@@ -100,7 +100,10 @@ export class Lsdc2CdkStack extends Stack {
       statements: [
         new iam.PolicyStatement({
           resources: ['*'],
-          actions: ['ec2:DescribeNetworkInterfaces', 'ec2:DescribeSecurityGroups', 'ec2:DescribeInstances', 'ec2:DescribeImages'],
+          actions: [
+            'ec2:DescribeNetworkInterfaces', 'ec2:DescribeSecurityGroups', 'ec2:DescribeInstances',
+            'ec2:DescribeImages', 'ec2:DescribeSubnets', 'ec2:DescribeSpotPriceHistory',
+          ],
         }),
         new iam.PolicyStatement({
           resources: [
