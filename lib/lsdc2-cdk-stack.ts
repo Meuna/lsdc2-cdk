@@ -343,6 +343,7 @@ export class Lsdc2CdkStack extends Stack {
       inlinePolicies: {
         's3': instanceS3Policy,
         'sqs': instanceSqsPolicy,
+        'logging': logPolicy,
       },
     });
     ec2Role.addManagedPolicy(
