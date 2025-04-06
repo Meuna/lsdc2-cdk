@@ -84,15 +84,17 @@ export class Lsdc2CdkStack extends Stack {
     const botEcsPolicy = new iam.PolicyDocument({
       statements: [
         new iam.PolicyStatement({
-          resources: ['*'],
-          actions: ['ecs:RegisterTaskDefinition', 'ecs:DeregisterTaskDefinition', 'ecs:ListTaskDefinitions']
+          resources: ["*"],
+          actions: ['ecs:ListTaskDefinitions', 'ecs:DeregisterTaskDefinition'],
         }),
         new iam.PolicyStatement({
           resources: [
-            this.formatArn({ service: 'ecs', resource: 'task-definition', resourceName: 'lsdc2*' }),
+            this.formatArn({ service: 'ecs', resource: 'task-definition', resourceName: cluster.clusterName + '*' }),
             this.formatArn({ service: 'ecs', resource: 'task', resourceName: cluster.clusterName + '*' }),
           ],
-          actions: ['ecs:RunTask', 'ecs:StopTask', 'ecs:DescribeTasks', 'ecs:TagResource']
+          actions: [
+            'ecs:RegisterTaskDefinition', 'ecs:RunTask', 'ecs:StopTask', 'ecs:DescribeTasks', 'ecs:TagResource'
+          ],
         }),
       ],
     });
