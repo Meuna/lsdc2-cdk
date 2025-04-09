@@ -29,7 +29,7 @@ export class Lsdc2CdkStack extends Stack {
     const discordBotFrontendPath = String(this.node.tryGetContext('discordBotFrontendPath'));
 
     // Base resources
-    const { bucket, serverSpecTable, serverTierTable, guildTable, serverTable, instanceTable, botQueue } = this.setupDataResources()
+    const { bucket, serverSpecTable, engineTierTable, guildTable, serverTable, instanceTable, botQueue } = this.setupDataResources()
     const { vpc, cluster, clusterLogGroup, executionRole, taskContainerRole, ec2Role, ec2Profile } = this.setupEngineResources(bucket, botQueue)
 
     // Setup discord bot lambdas
@@ -43,7 +43,7 @@ export class Lsdc2CdkStack extends Stack {
       'LOG_GROUP': clusterLogGroup.logGroupName,
       'SAVEGAME_BUCKET': bucket.bucketName,
       'SERVER_SPEC_TABLE': serverSpecTable.tableName,
-      'SERVER_TIER_TABLE': serverTierTable.tableName,
+      'ENGINE_TIER_TABLE': engineTierTable.tableName,
       'GUILD_TABLE': guildTable.tableName,
       'SERVER_TABLE': serverTable.tableName,
       'INSTANCE_TABLE': instanceTable.tableName,
@@ -77,7 +77,7 @@ export class Lsdc2CdkStack extends Stack {
           actions: ['s3:PutObject', 's3:GetObject']
         }),
         new iam.PolicyStatement({
-          resources: [serverSpecTable.tableArn, serverTierTable.tableArn, guildTable.tableArn, serverTable.tableArn, instanceTable.tableArn],
+          resources: [serverSpecTable.tableArn, engineTierTable.tableArn, guildTable.tableArn, serverTable.tableArn, instanceTable.tableArn],
           actions: ['dynamodb:GetItem', 'dynamodb:Scan', 'dynamodb:PutItem', 'dynamodb:DeleteItem']
         }),
       ],
@@ -234,7 +234,7 @@ export class Lsdc2CdkStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
       partitionKey: { name: 'key', type: dynamodb.AttributeType.STRING },
     });
-    const serverTierTable = new dynamodb.Table(this, 'tier', {
+    const engineTierTable = new dynamodb.Table(this, 'tier', {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       tableClass: dynamodb.TableClass.STANDARD_INFREQUENT_ACCESS,
       removalPolicy: RemovalPolicy.DESTROY,
@@ -265,7 +265,7 @@ export class Lsdc2CdkStack extends Stack {
       visibilityTimeout: Duration.minutes(2),
     });
 
-    return { bucket, serverSpecTable, serverTierTable, guildTable, serverTable, instanceTable, botQueue }
+    return { bucket, serverSpecTable, engineTierTable, guildTable, serverTable, instanceTable, botQueue }
   }
 
   setupEngineResources(bucket: s3.Bucket, botQueue: sqs.Queue) {
