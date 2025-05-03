@@ -70,12 +70,16 @@ export class Lsdc2CdkStack extends Stack {
         }),
       ],
     });
-    const botDynamoPolicy = new iam.PolicyDocument({
+    const botS3Policy = new iam.PolicyDocument({
       statements: [
         new iam.PolicyStatement({
           resources: [bucket.bucketArn + "/*"],
           actions: ['s3:PutObject', 's3:GetObject']
         }),
+      ],
+    });
+    const botDynamoPolicy = new iam.PolicyDocument({
+      statements: [
         new iam.PolicyStatement({
           resources: [serverSpecTable.tableArn, engineTierTable.tableArn, guildTable.tableArn, serverTable.tableArn, instanceTable.tableArn],
           actions: ['dynamodb:GetItem', 'dynamodb:Scan', 'dynamodb:PutItem', 'dynamodb:DeleteItem']
@@ -155,6 +159,7 @@ export class Lsdc2CdkStack extends Stack {
         'iam': botIamPolicy,
         'log': botLogPolicy,
         'dynamo': botDynamoPolicy,
+        's3': botS3Policy,
         'ecs': botEcsPolicy,
         'ec2': botEc2Policy,
         'sqs': botSqsPolicy,
