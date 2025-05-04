@@ -30,6 +30,9 @@ elif [[ "$overwrite_check" != *"ParameterNotFound"* ]]; then
 fi
 
 # Prompt for Discord bot IDs and secrets
+printf "Owner User ID (click on your name, in a Developer Mode Discord client): "
+read owner_id
+
 printf "Bot public key (General Information panel): "
 read pkey
 
@@ -44,8 +47,8 @@ printf "Bot token (Bot panel): "
 read -s token
 printf "\n"
 
-json_fmt='{"pkey":"%s","clientId":"%s","clientSecret":"%s","token":"%s"}'
-json_value=$(printf "$json_fmt" "$pkey" "$client_id" "$client_secret" "$token")
+json_fmt='{"ownerId":"%s","pkey":"%s","clientId":"%s","clientSecret":"%s","token":"%s"}'
+json_value=$(printf "$json_fmt" "$owner_id" "$pkey" "$client_id" "$client_secret" "$token")
 
 aws ssm put-parameter \
     --name "$name" \
